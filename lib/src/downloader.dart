@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
-import 'package:collection/collection.dart';
 
+import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_download_manager/flutter_download_manager.dart';
@@ -16,17 +16,11 @@ class DownloadManager {
 
   // var tasks = StreamController<DownloadTask>();
 
-  int maxConcurrentTasks = 2;
-  int runningTasks = 0;
-
   static final DownloadManager _dm = new DownloadManager._internal();
 
   DownloadManager._internal();
 
-  factory DownloadManager({int? maxConcurrentTasks}) {
-    if (maxConcurrentTasks != null) {
-      _dm.maxConcurrentTasks = maxConcurrentTasks;
-    }
+  factory DownloadManager() {
     return _dm;
   }
 
@@ -78,7 +72,7 @@ class DownloadManager {
               headers: {HttpHeaders.rangeHeader: 'bytes=$partialFileLength-'},
             ),
             cancelToken: cancelToken,
-            deleteOnError: true);
+            deleteOnError: false);
 
         if (response.statusCode == HttpStatus.partialContent) {
           var ioSink = partialFile.openWrite(mode: FileMode.writeOnlyAppend);
@@ -103,10 +97,11 @@ class DownloadManager {
       }
     } catch (e) {
       var task = getDownload(url)!;
+
+
       if (task.status.value != DownloadStatus.canceled &&
           task.status.value != DownloadStatus.paused) {
         setStatus(task, DownloadStatus.failed);
-        runningTasks--;
 
         if (_queue.isNotEmpty) {
           _startExecution();
@@ -121,8 +116,6 @@ class DownloadManager {
         await ioSink.close();
       }
     }
-
-    runningTasks--;
 
     if (_queue.isNotEmpty) {
       _startExecution();
@@ -158,6 +151,7 @@ class DownloadManager {
 
       return _addDownloadRequest(DownloadRequest(url, downloadFilename));
     }
+    return null;
   }
 
   Future<DownloadTask> _addDownloadRequest(
@@ -367,15 +361,11 @@ class DownloadManager {
   }
 
   void _startExecution() async {
-    if (runningTasks == maxConcurrentTasks || _queue.isEmpty) {
+    if (_queue.isEmpty) {
       return;
     }
 
-    while (_queue.isNotEmpty && runningTasks < maxConcurrentTasks) {
-      runningTasks++;
-      if (kDebugMode) {
-        print('Concurrent workers: $runningTasks');
-      }
+    while (_queue.isNotEmpty) {
       var currentRequest = _queue.removeFirst();
 
       download(
